@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Weave Realm · Klein Bottle VR</title>
+  <style>
+    :root {
+      --weave-primary: #125e8a;
+      --weave-accent: #3c92ca;
+      --weave-deep-green: #204b57;
+      --weave-abyss-blue: #053957;
+      --weave-mid-blue: #08527c;
+      --weave-silver: #c1dbe4;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: linear-gradient(110.76deg, var(--weave-deep-green), var(--weave-abyss-blue));
+      color: var(--weave-silver);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    #loading-screen {
+      position: fixed; inset: 0; z-index: 1000;
+      background: linear-gradient(110.76deg, var(--weave-deep-green), var(--weave-abyss-blue));
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: opacity 0.8s ease;
+    }
+    #loading-screen.hidden { opacity: 0; pointer-events: none; }
+
+    .loader-ring {
+      width: 80px; height: 80px; border: 3px solid var(--weave-silver);
+      border-top-color: var(--weave-accent); border-radius: 50%;
+      animation: spin 1s linear infinite; margin-bottom: 24px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loader-text { font-size: 14px; letter-spacing: 4px; text-transform: uppercase; }
+
+    #info-panel {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      text-align: center; z-index: 100; pointer-events: none;
+      transition: opacity 0.5s;
+    }
+    #info-panel.hidden { opacity: 0; }
+
+    .info-title {
+      font-size: 18px; font-weight: 600;
+      background: linear-gradient(94.74deg, var(--weave-accent), var(--weave-primary));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+    .info-sub { font-size: 12px; opacity: 0.7; }
+
+    #vr-button {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+      padding: 14px 36px; font-size: 15px; font-weight: 600; letter-spacing: 2px;
+      color: #fff; background: linear-gradient(94.74deg, var(--weave-accent), var(--weave-primary));
+      border: none; border-radius: 30px; cursor: pointer; z-index: 200;
+      box-shadow: 0 4px 24px rgba(60, 146, 202, 0.4);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    #vr-button:hover { transform: translateX(-50%) scale(1.05); box-shadow: 0 6px 32px rgba(60, 146, 202, 0.6); }
+    #vr-button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #debug-overlay {
+      position: fixed; top: 12px; right: 12px; z-index: 300;
+      background: rgba(5, 57, 87, 0.85); border: 1px solid var(--weave-accent);
+      border-radius: 8px; padding: 10px 14px; font-size: 11px; line-height: 1.6;
+      max-width: 220px; display: none;
+    }
+    #debug-overlay.visible { display: block; }
+    .debug-key { color: var(--weave-accent); font-family: monospace; }
+
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loader-ring"></div>
+  <div class="loader-text">Loading Klein Bottle</div>
+</div>
+
+<div id="info-panel">
+  <div class="info-title">KLEIN BOTTLE · REALITY &amp; VIRTUAL</div>
+  <div class="info-sub">Drag to wipe · Trigger to reset · Enter for VR</div>
+</div>
+
+<button id="vr-button" disabled>INITIALIZING VR</button>
+
+<div id="debug-overlay">
+  <div><span class="debug-key">Mouse/Drag</span> — Wipe surface</div>
+  <div><span class="debug-key">Click/Touch</span> — Toggle wipe</div>
+  <div><span class="debug-key">Enter</span> — Launch VR</div>
+  <div><span class="debug-key">Escape</span> — Exit VR</div>
+  <div><span class="debug-key">R</span> — Reset trail</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="main.js"></script>
+</body>
+</html>
