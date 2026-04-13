@@ -163,17 +163,14 @@ export const KleinFragmentShader = /* glsl */`
     float flow2 = flowNoise(flowPos * 1.5 + vec3(5.2, 3.1, 2.7), t * 0.8);
     float composite = flow * 0.6 + flow2 * 0.4;
 
-    // Erase mask: current wipe + accumulated trail
+    // Erase mask: only current wipe, no trail accumulation
     vec2 diff = uv - uWipeCenter;
     diff.x *= uResolution.x / uResolution.y;
     float dist = length(diff);
-    float currentMask = 1.0 - smoothstep(uWipeRadius * 0.5, uWipeRadius, dist);
+    float currentMask = 1.0 - smoothstep(uWipeRadius * 0.3, uWipeRadius, dist);
     currentMask *= uWipeStrength;
 
-    vec4 trail = texture2D(uTrailTexture, uv);
-    float trailMask = trail.a * 0.95;
-
-    float totalMask = clamp(currentMask + trailMask, 0.0, 1.0);
+    float totalMask = currentMask;
 
     // Möbius edge shimmer
     vec2 centeredUv = uv * 2.0 - 1.0;
@@ -200,15 +197,16 @@ export const KleinFragmentShader = /* glsl */`
     float gridLine = smoothstep(0.47, 0.5, max(grid.x, grid.y));
     col = mix(col, WEAVE_SILVER * 0.15, gridLine * (1.0 - totalMask) * 0.5);
 
-    // Trail glow
+    // Trail glow - only show on edges, not in center
     col = mix(col, WEAVE_ACCENT * 0.3, trailMask * 0.4);
 
-    // Wipe reveals abyss background
-    vec3 bgGradient = mix(WEAVE_DEEP_GREEN, WEAVE_ABYSS_BLUE, uv.y);
-    col = mix(col, bgGradient, totalMask);
+    // Wipe reveals transparent background (passthrough)
+    // 边缘发光效果
+    float edgeGlow = smoothstep(uWipeRadius, uWipeRadius * 0.6, dist) - smoothstep(uWipeRadius * 0.6, uWipeRadius * 0.3, dist);
+    col += edgeGlow * WEAVE_ACCENT * 0.5 * uWipeStrength;
 
-    // Alpha: transparent where wiped
-    float alpha = 1.0 - totalMask * 0.92;
+    // Alpha: fully transparent in wipe area for passthrough
+    float alpha = 1.0 - currentMask * 0.98;
 
     gl_FragColor = vec4(col, alpha);
   }

@@ -216,8 +216,13 @@ export class KleinVessel {
     this.kleinMaterial.uniforms.uTime.value = time;
     this.kleinMaterial.uniforms.uWipeCenter.value.x = this.wipeCenter.x;
     this.kleinMaterial.uniforms.uWipeCenter.value.y = this.wipeCenter.y;
+    
+    // 扣扳机时扩大擦拭半径，形成"透视窗口"效果
+    const targetRadius = this.isWiping ? 0.35 : 0.0;
+    this.wipeRadius = THREE.MathUtils.lerp(this.wipeRadius, targetRadius, 0.15);
+    
     this.kleinMaterial.uniforms.uWipeRadius.value = this.wipeRadius;
-    this.kleinMaterial.uniforms.uWipeStrength.value = this.isWiping ? 1.0 : 0.0;
+    this.kleinMaterial.uniforms.uWipeStrength.value = this.wipeRadius > 0.01 ? 1.0 : 0.0;
     this.kleinMaterial.uniforms.uTrailTexture.value =
       this.currentRT === 0 ? this.rtRead.texture : this.rtWrite.texture;
 
