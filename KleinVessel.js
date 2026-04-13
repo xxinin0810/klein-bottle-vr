@@ -214,10 +214,8 @@ export class KleinVessel {
   update(time, delta) {
     // Update shader uniforms
     this.kleinMaterial.uniforms.uTime.value = time;
-    this.kleinMaterial.uniforms.uWipeCenter.set(
-      this.wipeCenter.x,
-      this.wipeCenter.y
-    );
+    this.kleinMaterial.uniforms.uWipeCenter.value.x = this.wipeCenter.x;
+    this.kleinMaterial.uniforms.uWipeCenter.value.y = this.wipeCenter.y;
     this.kleinMaterial.uniforms.uWipeRadius.value = this.wipeRadius;
     this.kleinMaterial.uniforms.uWipeStrength.value = this.isWiping ? 1.0 : 0.0;
     this.kleinMaterial.uniforms.uTrailTexture.value =
@@ -241,7 +239,7 @@ export class KleinVessel {
   getSessionInitOptions() {
     return {
       requiredFeatures: ['local-floor'],
-      optionalFeatures: ['hand-tracking', 'layers'],
+      optionalFeatures: ['hand-tracking'],  // 移除 'layers' 避免兼容性问题
     };
   }
 }
