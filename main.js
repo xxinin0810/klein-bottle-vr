@@ -126,28 +126,60 @@ class KleinApp {
 
   async startVRSession() {
     try {
-      const session = await navigator.xr.requestSession('immersive-vr',
-        this.vessel.getSessionInitOptions()
-      );
+      const btn = document.getElementById('vr-button');
+      if (btn) {
+        btn.textContent = 'STARTING VR...';
+        btn.disabled = true;
+      }
+
+      const sessionInit = this.vessel.getSessionInitOptions();
+      console.log('Requesting VR session with options:', sessionInit);
+
+      const session = await navigator.xr.requestSession('immersive-vr', sessionInit);
+      console.log('VR session created:', session);
 
       session.addEventListener('end', () => {
         this.isVRRunning = false;
         const btn = document.getElementById('vr-button');
-        if (btn) btn.textContent = 'ENTER VR';
+        if (btn) {
+          btn.textContent = 'ENTER VR';
+          btn.disabled = false;
+        }
       });
+
+      // Set reference space BEFORE setting session
+      this.vessel.referenceSpace = await session.requestReferenceSpace('local-floor');
+      console.log('Reference space acquired');
 
       await this.sceneManager.getRenderer().xr.setSession(session);
       this.isVRRunning = true;
 
       this.vessel.xrSession = session;
-      this.vessel.referenceSpace = await session.requestReferenceSpace('local-floor');
 
-      const btn = document.getElementById('vr-button');
-      if (btn) btn.textContent = 'EXIT VR';
+      if (btn) {
+        btn.textContent = 'EXIT VR';
+        btn.disabled = false;
+      }
+
+      console.log('VR session started successfully');
 
     } catch (err) {
       console.error('Failed to start VR session:', err);
-      alert('VR启动失败: ' + err.message);
+      const btn = document.getElementById('vr-button');
+      if (btn) {
+        btn.textContent = 'VR ERROR - TRY REFRESH';
+        btn.disabled = false;
+      }
+      
+      // Show detailed error
+      const info = document.getElementById('info-panel');
+      if (info) {
+        info.innerHTML = `
+          <div class="info-title" style="color: #ff6b6b;">VR Error</div>
+          <div class="info-sub" style="margin-top: 8px;">${err.message}</div>
+          <div class="info-sub" style="margin-top: 4px; font-size: 10px;">Try: Pico Browser → Settings → Enable WebXR</div>
+        `;
+      }
     }
   }
 
