@@ -43,8 +43,8 @@ const ALPHA_SHADER = {
     float getWiperValue(bool wiperActive, vec3 handCartesianCoordinate) {
       if (!wiperActive) return 1.0;
       
-      // UV坐标转球面坐标：镜像X轴修正左右，镜像Y轴修正上下
-      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (1.0 - vUv.x) * 2.0 * PI, (1.0 - vUv.y) * PI));
+      // UV坐标转球面坐标：镜像Y轴修正上下，X轴旋转180度到前方
+      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (vUv.x + 0.5) * 2.0 * PI, (1.0 - vUv.y) * PI));
       float cosineSimilarity = dot(handCartesianCoordinate, cartesianCoordinate);
       float wiperValue = 1.0 - smoothstep(cos(uWiperDegrees * DEG_TO_RAD), 1.0, cosineSimilarity);
       wiperValue = 0.95 + 0.05 * wiperValue;

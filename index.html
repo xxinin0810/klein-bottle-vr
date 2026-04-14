@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Weave Realm · Klein Bottle VR v1.0.7</title>
+  <title>Weave Realm · Klein Bottle VR v1.0.8</title>
   <style>
     :root {
       --weave-primary: #125e8a;
@@ -72,10 +72,10 @@
       position: fixed; top: 12px; right: 12px; z-index: 300;
       background: rgba(5, 57, 87, 0.85); border: 1px solid var(--weave-accent);
       border-radius: 8px; padding: 10px 14px; font-size: 11px; line-height: 1.6;
-      max-width: 220px; display: none;
+      max-width: 280px;
     }
-    #debug-overlay.visible { display: block; }
     .debug-key { color: var(--weave-accent); font-family: monospace; }
+    .debug-value { color: #fff; font-family: monospace; font-size: 10px; }
 
     canvas { display: block; }
   </style>
@@ -89,16 +89,17 @@
 
 <div id="info-panel">
   <div class="info-title">KLEIN BOTTLE · REALITY &amp; VIRTUAL</div>
-  <div class="info-sub">Drag to wipe · Trigger to reset · Enter for VR · v1.0.7</div>
+  <div class="info-sub">Drag to wipe · Trigger to reset · Enter for VR · v1.0.8</div>
 </div>
 
 <button id="vr-button" disabled>INITIALIZING VR</button>
 
 <div id="debug-overlay">
-  <div><span class="debug-key">Mouse/Drag</span> — Wipe surface</div>
-  <div><span class="debug-key">Click/Touch</span> — Toggle wipe</div>
-  <div><span class="debug-key">Enter</span> — Launch VR</div>
-  <div><span class="debug-key">Escape</span> — Exit VR</div>
+  <div><span class="debug-key">Version:</span> <span class="debug-value" id="debug-version">v1.0.8</span></div>
+  <div><span class="debug-key">Session:</span> <span class="debug-value" id="debug-session">-</span></div>
+  <div><span class="debug-key">Passthrough:</span> <span class="debug-value" id="debug-passthrough">-</span></div>
+  <div style="margin-top: 8px;"><span class="debug-key">Controls:</span></div>
+  <div><span class="debug-key">Trigger</span> — Wipe surface</div>
   <div><span class="debug-key">R</span> — Reset trail</div>
 </div>
 

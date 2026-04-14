@@ -151,13 +151,18 @@ class KleinApp {
     try {
       // 尝试AR模式（支持摄像头passthrough）
       let session;
+      let sessionType = 'unknown';
+      
       try {
         session = await navigator.xr.requestSession('immersive-ar', {
           requiredFeatures: ['local-floor'],
           optionalFeatures: ['dom-overlay'],
           domOverlay: { root: document.body }
         });
+        sessionType = 'AR';
         console.log('AR session started with camera passthrough');
+        document.getElementById('debug-session').textContent = 'AR Mode';
+        document.getElementById('debug-passthrough').textContent = 'Camera';
       } catch (arError) {
         // AR不支持则fallback到VR+passthrough
         console.log('AR not supported, trying VR with passthrough');
@@ -165,7 +170,11 @@ class KleinApp {
           requiredFeatures: ['local-floor'],
           optionalFeatures: ['passthrough'],
         });
-        console.log('VR session started, passthrough:', session.enabledFeatures);
+        sessionType = 'VR';
+        const hasPassthrough = session.enabledFeatures && session.enabledFeatures.includes('passthrough');
+        console.log('VR session started, passthrough:', hasPassthrough);
+        document.getElementById('debug-session').textContent = 'VR Mode';
+        document.getElementById('debug-passthrough').textContent = hasPassthrough ? 'Yes' : 'No';
       }
       
       // 设置透明背景
@@ -173,6 +182,8 @@ class KleinApp {
       
       session.addEventListener('end', () => {
         document.getElementById('vr-button').textContent = 'ENTER VR';
+        document.getElementById('debug-session').textContent = '-';
+        document.getElementById('debug-passthrough').textContent = '-';
         this.scene.background = new THREE.Color(0x053957);
       });
       
@@ -182,6 +193,7 @@ class KleinApp {
     } catch (err) {
       console.error('VR启动失败:', err);
       alert('VR启动失败: ' + err.message);
+      document.getElementById('debug-session').textContent = 'Error: ' + err.message;
     }
   }
   
