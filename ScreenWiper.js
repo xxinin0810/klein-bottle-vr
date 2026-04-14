@@ -43,7 +43,8 @@ const ALPHA_SHADER = {
     float getWiperValue(bool wiperActive, vec3 handCartesianCoordinate) {
       if (!wiperActive) return 1.0;
       
-      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, PI - vUv.x * 2.0 * PI, PI - vUv.y * PI));
+      // UV坐标转球面坐标：注意球是从内部看的，需要调整
+      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, vUv.x * 2.0 * PI, vUv.y * PI));
       float cosineSimilarity = dot(handCartesianCoordinate, cartesianCoordinate);
       float wiperValue = 1.0 - smoothstep(cos(uWiperDegrees * DEG_TO_RAD), 1.0, cosineSimilarity);
       wiperValue = 0.95 + 0.05 * wiperValue;
@@ -52,8 +53,14 @@ const ALPHA_SHADER = {
 
     void main() {
       float prevFrameValue = texture2D(tDiffuse, vUv).g;
-      float newFrameValue = prevFrameValue + uReturnSpeed * (uLeftWiperActive || uRightWiperActive ? 0.0 : 1.0);
       
+      // 只在不活动时才恢复，且只在值小于1时恢复
+      float newFrameValue = prevFrameValue;
+      if (!uLeftWiperActive && !uRightWiperActive && prevFrameValue < 1.0) {
+        newFrameValue = prevFrameValue + uReturnSpeed;
+      }
+      
+      // 擦拭时减少值
       newFrameValue *= getWiperValue(uLeftWiperActive, uLeftHandCartesianCoordinate);
       newFrameValue *= getWiperValue(uRightWiperActive, uRightHandCartesianCoordinate);
       
@@ -199,8 +206,9 @@ export class ScreenWiper extends THREE.Mesh {
         const point = intersects[0].point.clone();
         const worldPos = new THREE.Vector3();
         this.getWorldPosition(worldPos);
-        // 反转方向：从交点指向相机
-        const dir = worldPos.sub(point).normalize();
+        
+        // 方向：从球心指向交点（球是从内部看的，所以方向要反转）
+        const dir = point.sub(worldPos).normalize();
         
         if (isLeft) {
           this.alphaMaterial.uniforms.uLeftWiperActive.value = true;
