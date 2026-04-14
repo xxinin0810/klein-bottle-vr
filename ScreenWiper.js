@@ -44,14 +44,12 @@ const ALPHA_SHADER = {
       
       float dist = length(diff);
       
-      // 只在半径范围内减少值，范围外保持不变
-      float wiperValue = 1.0;
+      // 在半径范围内减少值，范围外返回1.0（不变）
       if (dist < uWiperRadius * 2.0) {
-        wiperValue = smoothstep(0.0, uWiperRadius, dist);
-        // 确保中心完全透明(值接近0)，边缘逐渐过渡
-        wiperValue = mix(0.02, 1.0, smoothstep(0.0, uWiperRadius, dist));
+        // 中心=0.02(几乎透明)，边缘=1.0(不透明)
+        return mix(0.02, 1.0, smoothstep(0.0, uWiperRadius, dist));
       }
-      return wiperValue;
+      return 1.0; // 范围外保持不变
     }
 
     void main() {
@@ -60,13 +58,21 @@ const ALPHA_SHADER = {
       float newFrameValue = prevFrameValue;
       bool anyWiperActive = uLeftWiperActive || uRightWiperActive;
       
+      // 不活动时逐渐恢复
       if (!anyWiperActive && prevFrameValue < 0.999) {
         newFrameValue = min(prevFrameValue + uReturnSpeed, 1.0);
       }
       
+      // 活动时：只在擦拭区域减少值
       if (anyWiperActive) {
-        newFrameValue *= getWiperValue(uLeftWiperActive, uLeftWipeUv);
-        newFrameValue *= getWiperValue(uRightWiperActive, uRightWipeUv);
+        float leftWipe = getWiperValue(uLeftWiperActive, uLeftWipeUv);
+        float rightWipe = getWiperValue(uRightWiperActive, uRightWipeUv);
+        
+        // 取两个擦拭器的最小值（最透明）
+        float wipeFactor = min(leftWipe, rightWipe);
+        
+        // 只减少不增加：取当前值和擦拭值的较小者
+        newFrameValue = min(prevFrameValue, wipeFactor);
       }
       
       newFrameValue = clamp(newFrameValue, 0.0, 1.0);
