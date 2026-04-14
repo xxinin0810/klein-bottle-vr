@@ -43,8 +43,8 @@ const ALPHA_SHADER = {
     float getWiperValue(bool wiperActive, vec3 handCartesianCoordinate) {
       if (!wiperActive) return 1.0;
       
-      // UV坐标转球面坐标：注意球是从内部看的，需要调整
-      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, vUv.x * 2.0 * PI, vUv.y * PI));
+      // UV坐标转球面坐标：镜像X轴修正左右反转
+      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (1.0 - vUv.x) * 2.0 * PI, vUv.y * PI));
       float cosineSimilarity = dot(handCartesianCoordinate, cartesianCoordinate);
       float wiperValue = 1.0 - smoothstep(cos(uWiperDegrees * DEG_TO_RAD), 1.0, cosineSimilarity);
       wiperValue = 0.95 + 0.05 * wiperValue;
@@ -195,10 +195,15 @@ export class ScreenWiper extends THREE.Mesh {
       const controller = this.activeControllers[i];
       const isLeft = i === 0;
       
-      // 射线检测
-      this.tempMatrix.identity().extractRotation(controller.matrixWorld);
-      this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-      this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(this.tempMatrix);
+      // 直接使用控制器的世界方向
+      const controllerPos = new THREE.Vector3();
+      const controllerDir = new THREE.Vector3(0, 0, -1);
+      
+      controllerPos.setFromMatrixPosition(controller.matrixWorld);
+      controllerDir.applyQuaternion(controller.quaternion);
+      
+      this.raycaster.ray.origin.copy(controllerPos);
+      this.raycaster.ray.direction.copy(controllerDir);
       
       const intersects = this.raycaster.intersectObject(this);
       
@@ -207,7 +212,7 @@ export class ScreenWiper extends THREE.Mesh {
         const worldPos = new THREE.Vector3();
         this.getWorldPosition(worldPos);
         
-        // 方向：从球心指向交点（球是从内部看的，所以方向要反转）
+        // 方向：从球心指向交点
         const dir = point.sub(worldPos).normalize();
         
         if (isLeft) {
