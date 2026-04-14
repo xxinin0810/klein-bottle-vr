@@ -19,7 +19,7 @@ uniform float uTime;
 uniform vec4 uHoleColor;
 
 void main() {
-  // 从遮罩纹理读取透明度
+  // 从遮罩纹理读取"透明度"（涂抹的地方mask值高）
   vec4 maskData = texture2D(uMask, vUv);
   float mask = maskData.a;
   
@@ -27,9 +27,10 @@ void main() {
   float pulse = sin(uTime * 4.0) * 0.025;
   mask = clamp(mask + pulse * mask, 0.0, 1.0);
   
-  // 完全透明的地方显示passthrough
-  // 有遮罩的地方显示颜色
-  vec4 color = vec4(uHoleColor.rgb, mask * uHoleColor.a);
+  // 反转逻辑：
+  // mask=0 (未涂抹) → 显示蓝色遮罩（虚拟世界）
+  // mask=1 (已涂抹) → 完全透明（真实世界）
+  vec4 color = vec4(uHoleColor.rgb, (1.0 - mask) * uHoleColor.a);
   
   gl_FragColor = color;
 }
@@ -133,11 +134,11 @@ export class ScreenWiper extends THREE.Mesh {
   }
   
   clear(renderer) {
-    // 清空渲染目标
+    // 清空渲染目标（透明=未涂抹）
     renderer.setRenderTarget(this.renderTargetA);
-    renderer.clearColor();
+    renderer.clearColor(); // 全透明（mask=0）
     renderer.setRenderTarget(this.renderTargetB);
-    renderer.clearColor();
+    renderer.clearColor(); // 全透明（mask=0）
     renderer.setRenderTarget(null);
     
     this.material.uniforms.uMask.value = this.renderTargetB.texture;
