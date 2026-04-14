@@ -1,66 +1,101 @@
-// ScreenWiper.js — 基于Google XRBlocks实现
+// ScreenWiper.js — 完全按照Google XRBlocks实现
 import * as THREE from 'three';
 
-const VERTEX_SHADER = `
-varying vec2 vUv;
-void main() {
-  vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`;
+const DEG_TO_RAD = Math.PI / 180.0;
 
-const FRAGMENT_SHADER = `
-precision highp float;
+const ALPHA_SHADER = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uWiperDegrees: { value: 10.0 },
+    uLeftWiperActive: { value: false },
+    uLeftHandCartesianCoordinate: { value: new THREE.Vector3(0.0, -1.0, 0.0) },
+    uRightWiperActive: { value: false },
+    uRightHandCartesianCoordinate: { value: new THREE.Vector3(0.0, -1.0, 0.0) },
+    uReturnSpeed: { value: 0.005 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    #define PI 3.14159265359
+    #define DEG_TO_RAD 3.14159265359 / 180.0
+    
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse;
+    uniform float uWiperDegrees;
+    uniform bool uLeftWiperActive;
+    uniform vec3 uLeftHandCartesianCoordinate;
+    uniform bool uRightWiperActive;
+    uniform vec3 uRightHandCartesianCoordinate;
+    uniform float uReturnSpeed;
 
-varying vec2 vUv;
+    vec3 sphericalToCartesian(vec3 spherical) {
+      float x = spherical.x * cos(spherical.y) * sin(spherical.z);
+      float y = spherical.x * cos(spherical.z);
+      float z = spherical.x * sin(spherical.y) * sin(spherical.z);
+      return vec3(x, y, z);
+    }
 
-uniform sampler2D uMask;
-uniform float uTime;
-uniform vec4 uHoleColor;
+    float getWiperValue(bool wiperActive, vec3 handCartesianCoordinate) {
+      if (!wiperActive) return 1.0;
+      
+      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, PI - vUv.x * 2.0 * PI, PI - vUv.y * PI));
+      float cosineSimilarity = dot(handCartesianCoordinate, cartesianCoordinate);
+      float wiperValue = 1.0 - smoothstep(cos(uWiperDegrees * DEG_TO_RAD), 1.0, cosineSimilarity);
+      wiperValue = 0.95 + 0.05 * wiperValue;
+      return wiperValue;
+    }
 
-void main() {
-  // 从遮罩纹理读取
-  vec4 maskData = texture2D(uMask, vUv);
-  float mask = maskData.a;
-  
-  // 边缘脉冲效果
-  float pulse = sin(uTime * 4.0) * 0.025;
-  mask = clamp(mask + pulse * mask, 0.0, 1.0);
-  
-  // 正确逻辑：
-  // mask=1 (初始/恢复) → 显示蓝色虚拟世界（不透明）
-  // mask=0 (涂抹) → 完全透明（显示真实世界）
-  vec4 color = vec4(uHoleColor.rgb, mask * uHoleColor.a);
-  
-  gl_FragColor = color;
-}
-`;
+    void main() {
+      float prevFrameValue = texture2D(tDiffuse, vUv).g;
+      float newFrameValue = prevFrameValue + uReturnSpeed * (uLeftWiperActive || uRightWiperActive ? 0.0 : 1.0);
+      
+      newFrameValue *= getWiperValue(uLeftWiperActive, uLeftHandCartesianCoordinate);
+      newFrameValue *= getWiperValue(uRightWiperActive, uRightHandCartesianCoordinate);
+      
+      gl_FragColor = vec4(vec3(newFrameValue), 1.0);
+    }
+  `,
+};
 
-const CLEAR_SHADER = `
-precision highp float;
-varying vec2 vUv;
-uniform sampler2D uMask;
-uniform vec2 uWipePoint;
-uniform float uWipeRadius;
-uniform float uWipeActive;
+const SCREEN_WIPER_SHADER = {
+  uniforms: {
+    uMask: { value: null },
+    uHoleColor: { value: new THREE.Vector4(49/255, 103/255, 154/255, 0.9) },
+    uTime: { value: 0 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform sampler2D uMask;
+    uniform vec4 uHoleColor;
+    uniform float uTime;
 
-void main() {
-  vec4 maskData = texture2D(uMask, vUv);
-  float mask = maskData.a;
-  
-  // 计算到擦拭点的距离
-  float dist = distance(vUv, uWipePoint);
-  
-  // 擦拭效果：在半径内减少遮罩值（露出真实世界）
-  float wipeAmount = smoothstep(uWipeRadius, uWipeRadius * 0.5, dist) * uWipeActive;
-  mask = clamp(mask - wipeAmount * 0.15, 0.0, 1.0);
-  
-  // 自动恢复（向1增长，恢复为虚拟世界）
-  mask = min(mask + 0.002, 1.0);
-  
-  gl_FragColor = vec4(0.0, 0.0, 0.0, mask);
-}
-`;
+    void main() {
+      float mask = texture2D(uMask, vUv).g; // 从绿色通道读取
+      
+      // 脉冲效果
+      float pulse = sin(uTime * 4.0) * 0.025;
+      mask = clamp(mask + pulse * mask, 0.0, 1.0);
+      
+      // mask值高 = 显示虚拟世界（蓝色）
+      // mask值低 = 显示真实世界（透明）
+      vec4 color = vec4(uHoleColor.rgb, mask * uHoleColor.a);
+      
+      gl_FragColor = color;
+    }
+  `,
+};
 
 export class ScreenWiper extends THREE.Mesh {
   constructor() {
@@ -79,46 +114,35 @@ export class ScreenWiper extends THREE.Mesh {
       format: THREE.RGBAFormat,
     });
     
-    // 主材质：显示遮罩效果
+    // 主材质
     const material = new THREE.ShaderMaterial({
-      uniforms: {
-        uTexture: { value: null },
-        uMask: { value: renderTargetB.texture },
-        uTime: { value: 0 },
-        uHoleColor: { value: new THREE.Vector4(49/255, 103/255, 154/255, 0.9) },
-      },
-      vertexShader: VERTEX_SHADER,
-      fragmentShader: FRAGMENT_SHADER,
+      uniforms: THREE.UniformsUtils.clone(SCREEN_WIPER_SHADER.uniforms),
+      vertexShader: SCREEN_WIPER_SHADER.vertexShader,
+      fragmentShader: SCREEN_WIPER_SHADER.fragmentShader,
       transparent: true,
       side: THREE.DoubleSide,
     });
     
-    // 大球体包裹相机
+    // 大球体
     const geometry = new THREE.SphereGeometry(50, 64, 64);
-    geometry.scale(-1, 1, 1); // 反转法线，从内部看
+    geometry.scale(-1, 1, 1);
     
     super(geometry, material);
     
     this.renderTargetA = renderTargetA;
     this.renderTargetB = renderTargetB;
     
-    // 清除/累积着色器
-    this.clearMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        uMask: { value: renderTargetA.texture },
-        uWipePoint: { value: new THREE.Vector2(0.5, 0.5) },
-        uWipeRadius: { value: 0.05 }, // 缩小3倍：从0.15改为0.05
-        uWipeActive: { value: 0.0 },
-      },
-      vertexShader: VERTEX_SHADER,
-      fragmentShader: CLEAR_SHADER,
-      transparent: true,
+    // Alpha累积材质
+    this.alphaMaterial = new THREE.ShaderMaterial({
+      uniforms: THREE.UniformsUtils.clone(ALPHA_SHADER.uniforms),
+      vertexShader: ALPHA_SHADER.vertexShader,
+      fragmentShader: ALPHA_SHADER.fragmentShader,
     });
     
-    // 全屏四边形用于渲染到纹理
+    // 全屏四边形
     this.fullscreenQuad = new THREE.Mesh(
       new THREE.PlaneGeometry(2, 2),
-      this.clearMaterial
+      this.alphaMaterial
     );
     this.orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.orthoScene = new THREE.Scene();
@@ -126,20 +150,19 @@ export class ScreenWiper extends THREE.Mesh {
     
     // 控制器状态
     this.activeControllers = [];
-    this.wipePositions = [new THREE.Vector2(0.5, 0.5), new THREE.Vector2(0.5, 0.5)];
-    this.wipeActive = [false, false];
     
     // 射线检测器
     this.raycaster = new THREE.Raycaster();
+    this.tempMatrix = new THREE.Matrix4();
   }
   
   clear(renderer) {
-    // 填充整个遮罩为不透明（mask=1 = 虚拟世界）
+    // 填充初始值为0（会逐渐增长到1）
     renderer.setRenderTarget(this.renderTargetA);
-    renderer.setClearColor(new THREE.Color(0, 0, 0), 1.0); // alpha=1
+    renderer.setClearColor(new THREE.Color(0, 0, 0), 1.0);
     renderer.clearColor();
     renderer.setRenderTarget(this.renderTargetB);
-    renderer.setClearColor(new THREE.Color(0, 0, 0), 1.0); // alpha=1
+    renderer.setClearColor(new THREE.Color(0, 0, 0), 1.0);
     renderer.clearColor();
     renderer.setRenderTarget(null);
     
@@ -147,37 +170,47 @@ export class ScreenWiper extends THREE.Mesh {
   }
   
   update(renderer, time) {
-    // 跟随相机位置
+    // 跟随相机
     const xrCamera = renderer.xr.getCamera();
     if (xrCamera && xrCamera.cameras && xrCamera.cameras[0]) {
       this.position.copy(xrCamera.cameras[0].position);
     }
     
-    // 处理控制器输入
-    for (let i = 0; i < 2; i++) {
-      if (this.activeControllers[i]) {
-        const controller = this.activeControllers[i];
+    // 处理控制器
+    this.alphaMaterial.uniforms.uLeftWiperActive.value = false;
+    this.alphaMaterial.uniforms.uRightWiperActive.value = false;
+    
+    for (let i = 0; i < this.activeControllers.length && i < 2; i++) {
+      const controller = this.activeControllers[i];
+      const isLeft = i === 0;
+      
+      // 射线检测
+      this.tempMatrix.identity().extractRotation(controller.matrixWorld);
+      this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+      this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(this.tempMatrix);
+      
+      const intersects = this.raycaster.intersectObject(this);
+      
+      if (intersects.length > 0) {
+        const point = intersects[0].point;
+        const worldPos = new THREE.Vector3();
+        this.getWorldPosition(worldPos);
+        const dir = point.sub(worldPos).normalize();
         
-        // 射线检测
-        this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-        this.raycaster.ray.direction.set(0, 0, -1).applyQuaternion(controller.quaternion);
-        
-        const intersects = this.raycaster.intersectObject(this);
-        
-        if (intersects.length > 0) {
-          const uv = intersects[0].uv;
-          this.wipePositions[i].set(uv.x, uv.y);
-          this.wipeActive[i] = true;
+        if (isLeft) {
+          this.alphaMaterial.uniforms.uLeftWiperActive.value = true;
+          this.alphaMaterial.uniforms.uLeftHandCartesianCoordinate.value.copy(dir);
+        } else {
+          this.alphaMaterial.uniforms.uRightWiperActive.value = true;
+          this.alphaMaterial.uniforms.uRightHandCartesianCoordinate.value.copy(dir);
         }
-      } else {
-        this.wipeActive[i] = false;
       }
     }
     
     // 更新时间
     this.material.uniforms.uTime.value = time;
     
-    // 双缓冲渲染：累积遮罩
+    // 双缓冲渲染
     const xrEnabled = renderer.xr.enabled;
     const xrTarget = renderer.getRenderTarget();
     
@@ -186,23 +219,12 @@ export class ScreenWiper extends THREE.Mesh {
     // 交换缓冲区
     [this.renderTargetA, this.renderTargetB] = [this.renderTargetB, this.renderTargetA];
     
-    // 更新擦拭参数
-    this.clearMaterial.uniforms.uMask.value = this.renderTargetA.texture;
-    
-    // 使用第一个活跃的控制器
-    const activeIdx = this.wipeActive[0] ? 0 : (this.wipeActive[1] ? 1 : -1);
-    if (activeIdx >= 0) {
-      this.clearMaterial.uniforms.uWipePoint.value.copy(this.wipePositions[activeIdx]);
-      this.clearMaterial.uniforms.uWipeActive.value = 1.0;
-    } else {
-      this.clearMaterial.uniforms.uWipeActive.value = 0.0;
-    }
-    
-    // 渲染到B
+    // 渲染累积
+    this.alphaMaterial.uniforms.tDiffuse.value = this.renderTargetA.texture;
     renderer.setRenderTarget(this.renderTargetB);
     renderer.render(this.orthoScene, this.orthoCamera);
     
-    // 更新主材质的遮罩纹理
+    // 更新主材质
     this.material.uniforms.uMask.value = this.renderTargetB.texture;
     
     renderer.xr.enabled = xrEnabled;
@@ -227,6 +249,6 @@ export class ScreenWiper extends THREE.Mesh {
     this.renderTargetA.dispose();
     this.renderTargetB.dispose();
     this.material.dispose();
-    this.clearMaterial.dispose();
+    this.alphaMaterial.dispose();
   }
 }
