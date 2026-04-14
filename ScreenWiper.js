@@ -14,7 +14,6 @@ precision highp float;
 
 varying vec2 vUv;
 
-uniform sampler2D uTexture;
 uniform sampler2D uMask;
 uniform float uTime;
 uniform vec4 uHoleColor;
@@ -28,8 +27,9 @@ void main() {
   float pulse = sin(uTime * 4.0) * 0.025;
   mask = clamp(mask + pulse * mask, 0.0, 1.0);
   
-  // 根据遮罩混合颜色
-  vec4 color = vec4(uHoleColor.rgb, 1.0 - mask * uHoleColor.a);
+  // 完全透明的地方显示passthrough
+  // 有遮罩的地方显示颜色
+  vec4 color = vec4(uHoleColor.rgb, mask * uHoleColor.a);
   
   gl_FragColor = color;
 }
@@ -106,7 +106,7 @@ export class ScreenWiper extends THREE.Mesh {
       uniforms: {
         uMask: { value: renderTargetA.texture },
         uWipePoint: { value: new THREE.Vector2(0.5, 0.5) },
-        uWipeRadius: { value: 0.15 },
+        uWipeRadius: { value: 0.05 }, // 缩小3倍：从0.15改为0.05
         uWipeActive: { value: 0.0 },
       },
       vertexShader: VERTEX_SHADER,
