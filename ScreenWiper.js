@@ -172,15 +172,15 @@ const SCREEN_WIPER_SHADER = {
     void main() {
       float mask = texture2D(uMask, vUv).g; // 从绿色通道读取
       
-      // 脉冲效果（减小幅度）
+      // 脉冲效果
       float pulse = sin(uTime * 4.0) * 0.01;
-      mask = clamp(mask + pulse * mask, 0.0, 1.0);
+      mask = clamp(mask + pulse, 0.0, 1.0);
       
       // 生成莫奈油画背景
       vec3 monetColor = monetBackground(vUv, uTime);
       
-      // mask值高 = 显示虚拟世界（莫奈油画）
-      // mask值低 = 显示真实世界（透明）
+      // mask值高(≈1) = 显示虚拟世界（莫奈油画，完全不透明）
+      // mask值低(≈0) = 显示真实世界（完全透明）
       vec4 color = vec4(monetColor, mask);
       
       gl_FragColor = color;
@@ -211,6 +211,7 @@ export class ScreenWiper extends THREE.Mesh {
       vertexShader: SCREEN_WIPER_SHADER.vertexShader,
       fragmentShader: SCREEN_WIPER_SHADER.fragmentShader,
       transparent: true,
+      depthWrite: false, // 关键：允许透明区域显示底层内容
       side: THREE.DoubleSide,
     });
     
