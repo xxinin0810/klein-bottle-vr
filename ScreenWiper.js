@@ -43,8 +43,9 @@ const ALPHA_SHADER = {
     float getWiperValue(bool wiperActive, vec3 handCartesianCoordinate) {
       if (!wiperActive) return 1.0;
       
-      // UV坐标转球面坐标：镜像X轴修正左右，镜像Y轴修正上下，整体偏移修正前后
-      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (1.0 - vUv.x - 0.5) * 2.0 * PI, (1.0 - vUv.y) * PI));
+      // UV坐标转球面坐标：镜像Y轴修正上下，X轴偏移修正前后
+      // geometry.scale(-1, 1, 1)已经镜像了X轴，所以这里不需要再镜像
+      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (vUv.x + 0.5) * 2.0 * PI, (1.0 - vUv.y) * PI));
       float cosineSimilarity = dot(handCartesianCoordinate, cartesianCoordinate);
       float wiperValue = 1.0 - smoothstep(cos(uWiperDegrees * DEG_TO_RAD), 1.0, cosineSimilarity);
       wiperValue = 0.95 + 0.05 * wiperValue;
@@ -79,7 +80,6 @@ const ALPHA_SHADER = {
 const SCREEN_WIPER_SHADER = {
   uniforms: {
     uMask: { value: null },
-    uHoleColor: { value: new THREE.Vector4(49/255, 103/255, 154/255, 1.0) }, // 完全不透明
     uTime: { value: 0 },
   },
   vertexShader: `
@@ -92,8 +92,83 @@ const SCREEN_WIPER_SHADER = {
   fragmentShader: `
     varying vec2 vUv;
     uniform sampler2D uMask;
-    uniform vec4 uHoleColor;
     uniform float uTime;
+    
+    // 噪声函数
+    float random(vec2 st) {
+      return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+    }
+    
+    float noise(vec2 st) {
+      vec2 i = floor(st);
+      vec2 f = fract(st);
+      float a = random(i);
+      float b = random(i + vec2(1.0, 0.0));
+      float c = random(i + vec2(0.0, 1.0));
+      float d = random(i + vec2(1.0, 1.0));
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+    }
+    
+    float fbm(vec2 st) {
+      float value = 0.0;
+      float amplitude = 0.5;
+      for (int i = 0; i < 6; i++) {
+        value += amplitude * noise(st);
+        st *= 2.0;
+        amplitude *= 0.5;
+      }
+      return value;
+    }
+    
+    // 莫奈油画风格背景
+    vec3 monetBackground(vec2 uv, float time) {
+      // 基础色调 - 莫奈《塞纳河上的浮冰》配色
+      vec3 sky1 = vec3(0.75, 0.82, 0.88); // 浅蓝天空
+      vec3 sky2 = vec3(0.65, 0.75, 0.85); // 深蓝天空
+      vec3 water = vec3(0.55, 0.68, 0.78); // 河水蓝
+      vec3 ice = vec3(0.92, 0.95, 0.97); // 冰块白
+      vec3 warm = vec3(0.95, 0.88, 0.75); // 暖色光
+      vec3 shadow = vec3(0.45, 0.55, 0.65); // 阴影蓝
+      
+      // 噪声纹理
+      float n1 = fbm(uv * 3.0 + time * 0.02);
+      float n2 = fbm(uv * 5.0 - time * 0.015);
+      float n3 = fbm(uv * 8.0 + vec2(time * 0.01, -time * 0.01));
+      
+      // 天空和水的渐变
+      float horizon = 0.45 + n1 * 0.1;
+      vec3 color = mix(sky2, sky1, uv.y + n2 * 0.2);
+      color = mix(color, water, smoothstep(horizon - 0.05, horizon + 0.05, uv.y));
+      
+      // 冰块效果
+      float iceNoise = fbm(uv * 10.0 + time * 0.01);
+      float iceMask = smoothstep(0.3, 0.7, iceNoise) * smoothstep(horizon - 0.1, horizon + 0.15, uv.y);
+      color = mix(color, ice, iceMask * 0.6);
+      
+      // 笔触效果
+      float brushStrokes = sin(uv.x * 80.0 + n2 * 10.0) * sin(uv.y * 80.0 + n3 * 10.0);
+      brushStrokes = brushStrokes * 0.5 + 0.5;
+      
+      // 光影效果
+      float light = n1 * 0.3 + 0.7;
+      color *= light;
+      
+      // 添加暖色光斑
+      float warmSpots = smoothstep(0.6, 0.8, n3);
+      color = mix(color, warm, warmSpots * 0.3);
+      
+      // 添加阴影层次
+      float shadowMask = smoothstep(0.4, 0.6, n2);
+      color = mix(color, shadow, shadowMask * 0.2);
+      
+      // 轻微的色彩波动
+      color.r += sin(time * 0.5 + uv.x * 10.0) * 0.02;
+      color.g += cos(time * 0.4 + uv.y * 8.0) * 0.02;
+      color.b += sin(time * 0.6 + uv.x * 12.0) * 0.02;
+      
+      return color;
+    }
 
     void main() {
       float mask = texture2D(uMask, vUv).g; // 从绿色通道读取
@@ -102,9 +177,12 @@ const SCREEN_WIPER_SHADER = {
       float pulse = sin(uTime * 4.0) * 0.01;
       mask = clamp(mask + pulse * mask, 0.0, 1.0);
       
-      // mask值高 = 显示虚拟世界（蓝色）
+      // 生成莫奈油画背景
+      vec3 monetColor = monetBackground(vUv, uTime);
+      
+      // mask值高 = 显示虚拟世界（莫奈油画）
       // mask值低 = 显示真实世界（透明）
-      vec4 color = vec4(uHoleColor.rgb, mask * uHoleColor.a);
+      vec4 color = vec4(monetColor, mask);
       
       gl_FragColor = color;
     }
