@@ -19,7 +19,7 @@ uniform float uTime;
 uniform vec4 uHoleColor;
 
 void main() {
-  // 从遮罩纹理读取"透明度"（涂抹的地方mask值高）
+  // 从遮罩纹理读取
   vec4 maskData = texture2D(uMask, vUv);
   float mask = maskData.a;
   
@@ -27,10 +27,10 @@ void main() {
   float pulse = sin(uTime * 4.0) * 0.025;
   mask = clamp(mask + pulse * mask, 0.0, 1.0);
   
-  // 反转逻辑：
-  // mask=0 (未涂抹) → 显示蓝色遮罩（虚拟世界）
-  // mask=1 (已涂抹) → 完全透明（真实世界）
-  vec4 color = vec4(uHoleColor.rgb, (1.0 - mask) * uHoleColor.a);
+  // 正确逻辑：
+  // mask=1 (初始/恢复) → 显示蓝色虚拟世界（不透明）
+  // mask=0 (涂抹) → 完全透明（显示真实世界）
+  vec4 color = vec4(uHoleColor.rgb, mask * uHoleColor.a);
   
   gl_FragColor = color;
 }
