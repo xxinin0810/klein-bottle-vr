@@ -57,6 +57,9 @@ const ALPHA_SHADER = {
       newFrameValue *= getWiperValue(uLeftWiperActive, uLeftHandCartesianCoordinate);
       newFrameValue *= getWiperValue(uRightWiperActive, uRightHandCartesianCoordinate);
       
+      // 限制在0-1范围
+      newFrameValue = clamp(newFrameValue, 0.0, 1.0);
+      
       gl_FragColor = vec4(vec3(newFrameValue), 1.0);
     }
   `,
@@ -157,12 +160,13 @@ export class ScreenWiper extends THREE.Mesh {
   }
   
   clear(renderer) {
-    // 填充初始值为0（会逐渐增长到1）
+    // 填充初始值为1（完全不透明的虚拟世界）
+    // 绿色通道=1 = 显示虚拟世界
     renderer.setRenderTarget(this.renderTargetA);
-    renderer.setClearColor(new THREE.Color(0, 0, 0), 1.0);
+    renderer.setClearColor(new THREE.Color(1, 1, 1), 1.0); // RGB都是1
     renderer.clearColor();
     renderer.setRenderTarget(this.renderTargetB);
-    renderer.setClearColor(new THREE.Color(0, 0, 0), 1.0);
+    renderer.setClearColor(new THREE.Color(1, 1, 1), 1.0); // RGB都是1
     renderer.clearColor();
     renderer.setRenderTarget(null);
     
@@ -192,10 +196,11 @@ export class ScreenWiper extends THREE.Mesh {
       const intersects = this.raycaster.intersectObject(this);
       
       if (intersects.length > 0) {
-        const point = intersects[0].point;
+        const point = intersects[0].point.clone();
         const worldPos = new THREE.Vector3();
         this.getWorldPosition(worldPos);
-        const dir = point.sub(worldPos).normalize();
+        // 反转方向：从交点指向相机
+        const dir = worldPos.sub(point).normalize();
         
         if (isLeft) {
           this.alphaMaterial.uniforms.uLeftWiperActive.value = true;
