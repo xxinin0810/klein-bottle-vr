@@ -149,14 +149,24 @@ class KleinApp {
   
   async _startVRSession() {
     try {
-      // 使用AR模式以支持摄像头实景
-      const session = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['local-floor'],
-        optionalFeatures: ['dom-overlay', 'dom-overlay-for-handheld-ar'],
-        domOverlay: { root: document.body }
-      });
-      
-      console.log('AR session started, features:', session.enabledFeatures);
+      // 尝试AR模式（支持摄像头passthrough）
+      let session;
+      try {
+        session = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['local-floor'],
+          optionalFeatures: ['dom-overlay'],
+          domOverlay: { root: document.body }
+        });
+        console.log('AR session started with camera passthrough');
+      } catch (arError) {
+        // AR不支持则fallback到VR+passthrough
+        console.log('AR not supported, trying VR with passthrough');
+        session = await navigator.xr.requestSession('immersive-vr', {
+          requiredFeatures: ['local-floor'],
+          optionalFeatures: ['passthrough'],
+        });
+        console.log('VR session started, passthrough:', session.enabledFeatures);
+      }
       
       // 设置透明背景
       this.scene.background = null;
