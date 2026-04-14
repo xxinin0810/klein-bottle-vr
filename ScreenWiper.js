@@ -6,7 +6,7 @@ const DEG_TO_RAD = Math.PI / 180.0;
 const ALPHA_SHADER = {
   uniforms: {
     tDiffuse: { value: null },
-    uWiperDegrees: { value: 10.0 },
+    uWiperRadius: { value: 0.03 },
     uLeftWiperActive: { value: false },
     uLeftWipeUv: { value: new THREE.Vector2(0.5, 0.5) },
     uRightWiperActive: { value: false },
@@ -22,11 +22,10 @@ const ALPHA_SHADER = {
   `,
   fragmentShader: `
     #define PI 3.14159265359
-    #define DEG_TO_RAD 3.14159265359 / 180.0
     
     varying vec2 vUv;
     uniform sampler2D tDiffuse;
-    uniform float uWiperDegrees;
+    uniform float uWiperRadius;
     uniform bool uLeftWiperActive;
     uniform vec2 uLeftWipeUv;
     uniform bool uRightWiperActive;
@@ -36,17 +35,22 @@ const ALPHA_SHADER = {
     float getWiperValue(bool wiperActive, vec2 wipeUv) {
       if (!wiperActive) return 1.0;
       
-      // 直接使用UV坐标距离计算擦拭区域
+      // 使用UV坐标距离计算擦拭区域
       vec2 diff = vUv - wipeUv;
       
-      // 水平方向需要考虑环绕（0和1是相连的）
+      // 水平方向环绕处理（0和1是相连的）
       if (diff.x > 0.5) diff.x -= 1.0;
       if (diff.x < -0.5) diff.x += 1.0;
       
       float dist = length(diff);
-      float wiperRadius = uWiperDegrees / 360.0;
-      float wiperValue = 1.0 - smoothstep(wiperRadius * 0.5, wiperRadius, dist);
-      wiperValue = 0.95 + 0.05 * wiperValue;
+      
+      // 只在半径范围内减少值，范围外保持不变
+      float wiperValue = 1.0;
+      if (dist < uWiperRadius * 2.0) {
+        wiperValue = smoothstep(0.0, uWiperRadius, dist);
+        // 确保中心完全透明(值接近0)，边缘逐渐过渡
+        wiperValue = mix(0.02, 1.0, smoothstep(0.0, uWiperRadius, dist));
+      }
       return wiperValue;
     }
 
