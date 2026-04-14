@@ -149,34 +149,16 @@ class KleinApp {
   
   async _startVRSession() {
     try {
-      // 先尝试 immersive-ar 模式（支持 passthrough）
-      let session;
-      let isAR = false;
+      // 使用VR模式 + passthrough
+      const session = await navigator.xr.requestSession('immersive-vr', {
+        requiredFeatures: ['local-floor'],
+        optionalFeatures: ['passthrough'],
+      });
       
-      try {
-        session = await navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local-floor'],
-          optionalFeatures: ['passthrough', 'hand-tracking'],
-        });
-        isAR = true;
-        console.log('Starting in AR mode with passthrough');
-      } catch (arError) {
-        console.log('AR mode failed, trying VR mode:', arError.message);
-        // AR 失败则回退到 VR
-        session = await navigator.xr.requestSession('immersive-vr', {
-          requiredFeatures: ['local-floor'],
-          optionalFeatures: ['passthrough', 'hand-tracking'],
-        });
-      }
+      console.log('VR session started, passthrough:', session.enabledFeatures);
       
-      // 配置透视
-      if (isAR || (session.enabledFeatures && session.enabledFeatures.includes('passthrough'))) {
-        console.log('Passthrough enabled, using transparent background');
-        this.scene.background = null;
-      } else {
-        console.log('No passthrough, using semi-transparent background');
-        this.scene.background = null;
-      }
+      // 设置透明背景以支持passthrough
+      this.scene.background = null;
       
       session.addEventListener('end', () => {
         document.getElementById('vr-button').textContent = 'ENTER VR';

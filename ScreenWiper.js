@@ -43,8 +43,8 @@ const ALPHA_SHADER = {
     float getWiperValue(bool wiperActive, vec3 handCartesianCoordinate) {
       if (!wiperActive) return 1.0;
       
-      // UV坐标转球面坐标：镜像X轴和Y轴修正反转问题
-      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (1.0 - vUv.x) * 2.0 * PI, (1.0 - vUv.y) * PI));
+      // UV坐标转球面坐标：只镜像X轴修正左右反转
+      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (1.0 - vUv.x) * 2.0 * PI, vUv.y * PI));
       float cosineSimilarity = dot(handCartesianCoordinate, cartesianCoordinate);
       float wiperValue = 1.0 - smoothstep(cos(uWiperDegrees * DEG_TO_RAD), 1.0, cosineSimilarity);
       wiperValue = 0.95 + 0.05 * wiperValue;
@@ -98,8 +98,8 @@ const SCREEN_WIPER_SHADER = {
     void main() {
       float mask = texture2D(uMask, vUv).g; // 从绿色通道读取
       
-      // 脉冲效果
-      float pulse = sin(uTime * 4.0) * 0.025;
+      // 脉冲效果（减小幅度）
+      float pulse = sin(uTime * 4.0) * 0.01;
       mask = clamp(mask + pulse * mask, 0.0, 1.0);
       
       // mask值高 = 显示虚拟世界（蓝色）
