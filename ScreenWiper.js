@@ -43,8 +43,8 @@ const ALPHA_SHADER = {
     float getWiperValue(bool wiperActive, vec3 handCartesianCoordinate) {
       if (!wiperActive) return 1.0;
       
-      // UV坐标转球面坐标：镜像X轴修正左右反转
-      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (1.0 - vUv.x) * 2.0 * PI, vUv.y * PI));
+      // UV坐标转球面坐标：镜像X轴和Y轴修正反转问题
+      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (1.0 - vUv.x) * 2.0 * PI, (1.0 - vUv.y) * PI));
       float cosineSimilarity = dot(handCartesianCoordinate, cartesianCoordinate);
       float wiperValue = 1.0 - smoothstep(cos(uWiperDegrees * DEG_TO_RAD), 1.0, cosineSimilarity);
       wiperValue = 0.95 + 0.05 * wiperValue;
@@ -56,13 +56,17 @@ const ALPHA_SHADER = {
       
       // 只在不活动时才恢复，且只在值小于1时恢复
       float newFrameValue = prevFrameValue;
-      if (!uLeftWiperActive && !uRightWiperActive && prevFrameValue < 1.0) {
-        newFrameValue = prevFrameValue + uReturnSpeed;
+      bool anyWiperActive = uLeftWiperActive || uRightWiperActive;
+      
+      if (!anyWiperActive && prevFrameValue < 0.999) {
+        newFrameValue = min(prevFrameValue + uReturnSpeed, 1.0);
       }
       
       // 擦拭时减少值
-      newFrameValue *= getWiperValue(uLeftWiperActive, uLeftHandCartesianCoordinate);
-      newFrameValue *= getWiperValue(uRightWiperActive, uRightHandCartesianCoordinate);
+      if (anyWiperActive) {
+        newFrameValue *= getWiperValue(uLeftWiperActive, uLeftHandCartesianCoordinate);
+        newFrameValue *= getWiperValue(uRightWiperActive, uRightHandCartesianCoordinate);
+      }
       
       // 限制在0-1范围
       newFrameValue = clamp(newFrameValue, 0.0, 1.0);
@@ -75,7 +79,7 @@ const ALPHA_SHADER = {
 const SCREEN_WIPER_SHADER = {
   uniforms: {
     uMask: { value: null },
-    uHoleColor: { value: new THREE.Vector4(49/255, 103/255, 154/255, 0.9) },
+    uHoleColor: { value: new THREE.Vector4(49/255, 103/255, 154/255, 1.0) }, // 完全不透明
     uTime: { value: 0 },
   },
   vertexShader: `
