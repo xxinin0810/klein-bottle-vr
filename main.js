@@ -1,223 +1,183 @@
 // main.js — Klein Bottle VR Application
 import * as THREE from 'three';
-import { KleinScene } from './KleinScene.js';
-import { KleinVessel } from './KleinVessel.js';
+import { ScreenWiper } from './ScreenWiper.js';
 
 class KleinApp {
   constructor() {
-    this.sceneManager = null;
-    this.vessel = null;
+    this.renderer = null;
+    this.scene = null;
+    this.camera = null;
+    this.screenWiper = null;
     this.clock = new THREE.Clock();
-
-    this.isVRRunning = false;
-    this.loaded = false;
-
-    // Mouse/touch debug state
-    this.mouseNDC = new THREE.Vector2();
-    this.mouseDown = false;
+    this.controllers = [];
   }
 
   async init() {
-    const container = document.getElementById('container') || document.body;
-
-    // Scene
-    this.sceneManager = new KleinScene();
-    this.sceneManager.init(container);
-
-    // Klein Vessel
-    this.vessel = new KleinVessel(
-      this.sceneManager.getScene(),
-      this.sceneManager.getRenderer()
+    // 创建场景
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x053957);
+    
+    // 创建相机
+    this.camera = new THREE.PerspectiveCamera(
+      70,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
     );
-
-    // Event listeners
+    this.camera.position.set(0, 1.6, 0);
+    
+    // 创建渲染器
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+    });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.xr.enabled = true;
+    document.body.appendChild(this.renderer.domElement);
+    
+    // 创建 ScreenWiper
+    this.screenWiper = new ScreenWiper();
+    this.scene.add(this.screenWiper);
+    
+    // 初始化遮罩
+    this.screenWiper.clear(this.renderer);
+    
+    // 设置灯光
+    const ambientLight = new THREE.AmbientLight(0x3c92ca, 0.5);
+    this.scene.add(ambientLight);
+    
+    // 设置VR控制器
+    this._setupControllers();
+    
+    // 绑定事件
     this._bindEvents();
-
-    // Check WebXR support
+    
+    // 检查WebXR支持
     if ('xr' in navigator) {
       const supported = await navigator.xr.isSessionSupported('immersive-vr');
+      const btn = document.getElementById('vr-button');
       if (supported) {
-        this._setupVRButton();
+        btn.disabled = false;
+        btn.textContent = 'ENTER VR';
       } else {
-        document.getElementById('vr-button').textContent = 'VR NOT SUPPORTED';
+        btn.textContent = 'VR NOT SUPPORTED';
       }
-    } else {
-      document.getElementById('vr-button').textContent = 'WEBXR UNAVAILABLE';
     }
-
-    // Mark loaded
-    this.loaded = true;
+    
+    // 隐藏加载界面
     document.getElementById('loading-screen').classList.add('hidden');
-
-    // Start animation loop
+    
+    // 开始动画循环
     this._animate();
   }
-
-  _bindEvents() {
-    const canvas = this.sceneManager.getRenderer().domElement;
-
-    // Keyboard
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Enter') this.startVRSession();
-      if (e.code === 'Escape' && this.isVRRunning) this.endVRSession();
-      if (e.code === 'KeyR') this.vessel.reset();
-    });
-
-    // Mouse (desktop debug)
-    canvas.addEventListener('mousemove', (e) => {
-      this.mouseNDC.x =  (e.clientX / window.innerWidth)  * 2 - 1;
-      this.mouseNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
-      this.vessel.setWipeFromMouse(this.mouseNDC.x, this.mouseNDC.y);
-    });
-
-    canvas.addEventListener('mousedown', () => {
-      this.mouseDown = true;
-      this.vessel.isWiping = true;
-    });
-    canvas.addEventListener('mouseup', () => {
-      this.mouseDown = false;
-      this.vessel.isWiping = false;
-      this.vessel._updateTrailTexture();
-    });
-
-    // Touch
-    canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      this.mouseDown = true;
-      this.vessel.isWiping = true;
-    }, { passive: false });
-    canvas.addEventListener('touchend', () => {
-      this.mouseDown = false;
-      this.vessel.isWiping = false;
-      this.vessel._updateTrailTexture();
-    });
-    canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      const t = e.touches[0];
-      this.mouseNDC.x =  (t.clientX / window.innerWidth)  * 2 - 1;
-      this.mouseNDC.y = -(t.clientY / window.innerHeight) * 2 + 1;
-      this.vessel.setWipeFromMouse(this.mouseNDC.x, this.mouseNDC.y);
-    }, { passive: false });
-
-    // Show debug overlay on first interaction
-    const showDebug = () => {
-      document.getElementById('debug-overlay').classList.add('visible');
-      window.removeEventListener('click', showDebug);
-    };
-    window.addEventListener('click', showDebug);
-  }
-
-  _setupVRButton() {
-    const btn = document.getElementById('vr-button');
-    btn.disabled = false;
-    btn.textContent = 'ENTER VR';
-
-    btn.addEventListener('click', () => {
-      if (!this.isVRRunning) {
-        this.startVRSession();
-      } else {
-        this.endVRSession();
-      }
-    });
-
-    // Wire to renderer VR button
-    this.sceneManager.getRenderer().xr.getSessionButton = () => btn;
-  }
-
-  async startVRSession() {
-    try {
-      const btn = document.getElementById('vr-button');
-      if (btn) {
-        btn.textContent = 'STARTING VR...';
-        btn.disabled = true;
-      }
-
-      const sessionInit = this.vessel.getSessionInitOptions();
-      console.log('Requesting VR session with options:', sessionInit);
-
-      const session = await navigator.xr.requestSession('immersive-vr', sessionInit);
-      console.log('VR session created:', session);
-
-      session.addEventListener('end', () => {
-        this.isVRRunning = false;
-        const btn = document.getElementById('vr-button');
-        if (btn) {
-          btn.textContent = 'ENTER VR';
-          btn.disabled = false;
-        }
+  
+  _setupControllers() {
+    for (let i = 0; i < 2; i++) {
+      const controller = this.renderer.xr.getController(i);
+      controller.addEventListener('selectstart', (e) => {
+        this.screenWiper.addActiveController(e.target);
       });
-
-      // Set reference space BEFORE setting session
-      this.vessel.referenceSpace = await session.requestReferenceSpace('local-floor');
-      console.log('Reference space acquired');
-
-      await this.sceneManager.getRenderer().xr.setSession(session);
-      this.isVRRunning = true;
-
-      this.vessel.xrSession = session;
-
-      if (btn) {
-        btn.textContent = 'EXIT VR';
-        btn.disabled = false;
-      }
-
-      console.log('VR session started successfully');
-
-    } catch (err) {
-      console.error('Failed to start VR session:', err);
-      const btn = document.getElementById('vr-button');
-      if (btn) {
-        btn.textContent = 'VR ERROR - TRY REFRESH';
-        btn.disabled = false;
-      }
+      controller.addEventListener('selectend', (e) => {
+        this.screenWiper.removeActiveController(e.target);
+      });
+      this.scene.add(controller);
+      this.controllers.push(controller);
       
-      // Show detailed error
-      const info = document.getElementById('info-panel');
-      if (info) {
-        info.innerHTML = `
-          <div class="info-title" style="color: #ff6b6b;">VR Error</div>
-          <div class="info-sub" style="margin-top: 8px;">${err.message}</div>
-          <div class="info-sub" style="margin-top: 4px; font-size: 10px;">Try: Pico Browser → Settings → Enable WebXR</div>
-        `;
+      // 添加射线可视化
+      const rayGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -5),
+      ]);
+      const rayMat = new THREE.LineBasicMaterial({
+        color: i === 0 ? 0x3c92ca : 0x125e8a,
+        transparent: true,
+        opacity: 0.6,
+      });
+      const ray = new THREE.Line(rayGeom, rayMat);
+      controller.add(ray);
+    }
+  }
+  
+  _bindEvents() {
+    window.addEventListener('resize', () => {
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    
+    // VR按钮
+    const btn = document.getElementById('vr-button');
+    btn.addEventListener('click', () => {
+      if (this.renderer.xr.isPresenting) {
+        this.renderer.xr.getSession().end();
+      } else {
+        this._startVRSession();
       }
+    });
+    
+    // 键盘快捷键
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Enter') this._startVRSession();
+      if (e.code === 'KeyR') this.screenWiper.clear(this.renderer);
+    });
+    
+    // 桌面鼠标调试
+    const canvas = this.renderer.domElement;
+    let mouseDown = false;
+    
+    canvas.addEventListener('mousedown', () => {
+      mouseDown = true;
+      this.screenWiper.wipeActive[0] = true;
+    });
+    
+    canvas.addEventListener('mouseup', () => {
+      mouseDown = false;
+      this.screenWiper.wipeActive[0] = false;
+    });
+    
+    canvas.addEventListener('mousemove', (e) => {
+      if (mouseDown) {
+        const x = e.clientX / window.innerWidth;
+        const y = 1.0 - e.clientY / window.innerHeight;
+        this.screenWiper.wipePositions[0].set(x, y);
+      }
+    });
+  }
+  
+  async _startVRSession() {
+    try {
+      const session = await navigator.xr.requestSession('immersive-vr', {
+        requiredFeatures: ['local-floor'],
+      });
+      
+      session.addEventListener('end', () => {
+        document.getElementById('vr-button').textContent = 'ENTER VR';
+      });
+      
+      await this.renderer.xr.setSession(session);
+      document.getElementById('vr-button').textContent = 'EXIT VR';
+      
+    } catch (err) {
+      console.error('VR启动失败:', err);
+      alert('VR启动失败: ' + err.message);
     }
   }
-
-  endVRSession() {
-    if (this.vessel.xrSession) {
-      this.vessel.xrSession.end();
-      this.vessel.xrSession = null;
-    }
-  }
-
-  _processXRInput() {
-    if (this.vessel.xrSession) {
-      this.vessel.processXRInput(this.vessel.xrSession);
-    }
-  }
-
+  
   _animate() {
-    this.sceneManager.getRenderer().setAnimationLoop((time) => {
-      const delta = this.clock.getDelta();
+    this.renderer.setAnimationLoop((time) => {
       const elapsed = this.clock.getElapsedTime();
-
-      // Update scene
-      this.sceneManager.update(elapsed);
-
-      // Update vessel
-      this._processXRInput();
-      this.vessel.update(elapsed, delta);
-
-      // Render
-      this.sceneManager.getRenderer().render(
-        this.sceneManager.getScene(),
-        this.sceneManager.getCamera()
-      );
+      
+      // 更新 ScreenWiper
+      this.screenWiper.update(this.renderer, elapsed);
+      
+      // 渲染场景
+      this.renderer.render(this.scene, this.camera);
     });
   }
 }
 
-// Bootstrap
+// 启动应用
 window.addEventListener('DOMContentLoaded', async () => {
   const app = new KleinApp();
   await app.init();
