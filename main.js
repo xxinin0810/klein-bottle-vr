@@ -29,11 +29,13 @@ class KleinApp {
     // 创建渲染器
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: true,
+      alpha: true, // 启用透明背景
+      powerPreference: 'high-performance',
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.xr.enabled = true;
+    this.renderer.setClearColor(0x000000, 0); // 完全透明背景
     document.body.appendChild(this.renderer.domElement);
     
     // 创建 ScreenWiper
@@ -149,10 +151,21 @@ class KleinApp {
     try {
       const session = await navigator.xr.requestSession('immersive-vr', {
         requiredFeatures: ['local-floor'],
+        optionalFeatures: ['passthrough'], // 请求透视功能
       });
+      
+      // 检查是否支持透视
+      if (session.enabledFeatures && session.enabledFeatures.includes('passthrough')) {
+        console.log('Passthrough enabled');
+        this.scene.background = null; // 清除背景色，使用透明
+      } else {
+        console.log('Passthrough not available, using transparent background');
+        this.scene.background = null;
+      }
       
       session.addEventListener('end', () => {
         document.getElementById('vr-button').textContent = 'ENTER VR';
+        this.scene.background = new THREE.Color(0x053957);
       });
       
       await this.renderer.xr.setSession(session);
