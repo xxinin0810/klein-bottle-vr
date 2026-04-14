@@ -8,9 +8,9 @@ const ALPHA_SHADER = {
     tDiffuse: { value: null },
     uWiperDegrees: { value: 10.0 },
     uLeftWiperActive: { value: false },
-    uLeftHandCartesianCoordinate: { value: new THREE.Vector3(0.0, -1.0, 0.0) },
+    uLeftWipeUv: { value: new THREE.Vector2(0.5, 0.5) },
     uRightWiperActive: { value: false },
-    uRightHandCartesianCoordinate: { value: new THREE.Vector3(0.0, -1.0, 0.0) },
+    uRightWipeUv: { value: new THREE.Vector2(0.5, 0.5) },
     uReturnSpeed: { value: 0.005 },
   },
   vertexShader: `
@@ -28,25 +28,24 @@ const ALPHA_SHADER = {
     uniform sampler2D tDiffuse;
     uniform float uWiperDegrees;
     uniform bool uLeftWiperActive;
-    uniform vec3 uLeftHandCartesianCoordinate;
+    uniform vec2 uLeftWipeUv;
     uniform bool uRightWiperActive;
-    uniform vec3 uRightHandCartesianCoordinate;
+    uniform vec2 uRightWipeUv;
     uniform float uReturnSpeed;
 
-    vec3 sphericalToCartesian(vec3 spherical) {
-      float x = spherical.x * cos(spherical.y) * sin(spherical.z);
-      float y = spherical.x * cos(spherical.z);
-      float z = spherical.x * sin(spherical.y) * sin(spherical.z);
-      return vec3(x, y, z);
-    }
-
-    float getWiperValue(bool wiperActive, vec3 handCartesianCoordinate) {
+    float getWiperValue(bool wiperActive, vec2 wipeUv) {
       if (!wiperActive) return 1.0;
       
-      // UV坐标转球面坐标：镜像Y轴修正上下，添加PI修正前后180度
-      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (vUv.x + 0.5) * 2.0 * PI, (1.0 - vUv.y) * PI));
-      float cosineSimilarity = dot(handCartesianCoordinate, cartesianCoordinate);
-      float wiperValue = 1.0 - smoothstep(cos(uWiperDegrees * DEG_TO_RAD), 1.0, cosineSimilarity);
+      // 直接使用UV坐标距离计算擦拭区域
+      vec2 diff = vUv - wipeUv;
+      
+      // 水平方向需要考虑环绕（0和1是相连的）
+      if (diff.x > 0.5) diff.x -= 1.0;
+      if (diff.x < -0.5) diff.x += 1.0;
+      
+      float dist = length(diff);
+      float wiperRadius = uWiperDegrees / 360.0;
+      float wiperValue = 1.0 - smoothstep(wiperRadius * 0.5, wiperRadius, dist);
       wiperValue = 0.95 + 0.05 * wiperValue;
       return wiperValue;
     }
@@ -54,7 +53,6 @@ const ALPHA_SHADER = {
     void main() {
       float prevFrameValue = texture2D(tDiffuse, vUv).g;
       
-      // 只在不活动时才恢复，且只在值小于1时恢复
       float newFrameValue = prevFrameValue;
       bool anyWiperActive = uLeftWiperActive || uRightWiperActive;
       
@@ -62,13 +60,11 @@ const ALPHA_SHADER = {
         newFrameValue = min(prevFrameValue + uReturnSpeed, 1.0);
       }
       
-      // 擦拭时减少值
       if (anyWiperActive) {
-        newFrameValue *= getWiperValue(uLeftWiperActive, uLeftHandCartesianCoordinate);
-        newFrameValue *= getWiperValue(uRightWiperActive, uRightHandCartesianCoordinate);
+        newFrameValue *= getWiperValue(uLeftWiperActive, uLeftWipeUv);
+        newFrameValue *= getWiperValue(uRightWiperActive, uRightWipeUv);
       }
       
-      // 限制在0-1范围
       newFrameValue = clamp(newFrameValue, 0.0, 1.0);
       
       gl_FragColor = vec4(vec3(newFrameValue), 1.0);
@@ -276,7 +272,7 @@ export class ScreenWiper extends THREE.Mesh {
       const controller = this.activeControllers[i];
       const isLeft = i === 0;
       
-      // 直接使用控制器的世界方向
+      // 使用控制器方向进行射线检测
       const controllerPos = new THREE.Vector3();
       const controllerDir = new THREE.Vector3(0, 0, -1);
       
@@ -289,19 +285,17 @@ export class ScreenWiper extends THREE.Mesh {
       const intersects = this.raycaster.intersectObject(this);
       
       if (intersects.length > 0) {
-        const point = intersects[0].point.clone();
-        const worldPos = new THREE.Vector3();
-        this.getWorldPosition(worldPos);
+        // 直接使用射线交点返回的UV坐标
+        const uv = intersects[0].uv;
         
-        // 方向：从球心指向交点
-        const dir = point.sub(worldPos).normalize();
-        
-        if (isLeft) {
-          this.alphaMaterial.uniforms.uLeftWiperActive.value = true;
-          this.alphaMaterial.uniforms.uLeftHandCartesianCoordinate.value.copy(dir);
-        } else {
-          this.alphaMaterial.uniforms.uRightWiperActive.value = true;
-          this.alphaMaterial.uniforms.uRightHandCartesianCoordinate.value.copy(dir);
+        if (uv) {
+          if (isLeft) {
+            this.alphaMaterial.uniforms.uLeftWiperActive.value = true;
+            this.alphaMaterial.uniforms.uLeftWipeUv.value.set(uv.x, uv.y);
+          } else {
+            this.alphaMaterial.uniforms.uRightWiperActive.value = true;
+            this.alphaMaterial.uniforms.uRightWipeUv.value.set(uv.x, uv.y);
+          }
         }
       }
     }
