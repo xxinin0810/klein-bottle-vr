@@ -45,7 +45,7 @@ const ALPHA_SHADER = {
       
       // UV坐标转球面坐标：镜像Y轴修正上下，X轴偏移修正前后
       // geometry.scale(-1, 1, 1)已经镜像了X轴，所以这里不需要再镜像
-      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (vUv.x + 0.5) * 2.0 * PI, (1.0 - vUv.y) * PI));
+      vec3 cartesianCoordinate = sphericalToCartesian(vec3(1.0, (vUv.x - 0.5) * 2.0 * PI, (1.0 - vUv.y) * PI));
       float cosineSimilarity = dot(handCartesianCoordinate, cartesianCoordinate);
       float wiperValue = 1.0 - smoothstep(cos(uWiperDegrees * DEG_TO_RAD), 1.0, cosineSimilarity);
       wiperValue = 0.95 + 0.05 * wiperValue;
