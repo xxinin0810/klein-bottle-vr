@@ -51,12 +51,12 @@ void main() {
   // 计算到擦拭点的距离
   float dist = distance(vUv, uWipePoint);
   
-  // 擦拭效果：在半径内增加透明度
+  // 擦拭效果：在半径内减少遮罩值（露出真实世界）
   float wipeAmount = smoothstep(uWipeRadius, uWipeRadius * 0.5, dist) * uWipeActive;
-  mask = clamp(mask + wipeAmount * 0.15, 0.0, 1.0);
+  mask = clamp(mask - wipeAmount * 0.15, 0.0, 1.0);
   
-  // 自动恢复（向0衰减）
-  mask = max(mask - 0.002, 0.0);
+  // 自动恢复（向1增长，恢复为虚拟世界）
+  mask = min(mask + 0.002, 1.0);
   
   gl_FragColor = vec4(0.0, 0.0, 0.0, mask);
 }
@@ -134,11 +134,13 @@ export class ScreenWiper extends THREE.Mesh {
   }
   
   clear(renderer) {
-    // 清空渲染目标（透明=未涂抹）
+    // 填充整个遮罩为不透明（mask=1 = 虚拟世界）
     renderer.setRenderTarget(this.renderTargetA);
-    renderer.clearColor(); // 全透明（mask=0）
+    renderer.setClearColor(new THREE.Color(0, 0, 0), 1.0); // alpha=1
+    renderer.clearColor();
     renderer.setRenderTarget(this.renderTargetB);
-    renderer.clearColor(); // 全透明（mask=0）
+    renderer.setClearColor(new THREE.Color(0, 0, 0), 1.0); // alpha=1
+    renderer.clearColor();
     renderer.setRenderTarget(null);
     
     this.material.uniforms.uMask.value = this.renderTargetB.texture;
